@@ -1,0 +1,174 @@
+﻿Flume Conf file:
+agent2.sources = source1
+agent2.sinks = sink1
+agent2.channels = channel1
+
+agent2.sources.source1.channels = channel1
+agent2.sinks.sink1.channel = channel1
+agent2.sources.source1.type = spooldir
+agent2.sources.source1.spoolDir = /home/acadgild/Desktop/tmp/spooldir
+agent2.sinks.sink1.type = hdfs
+
+agent2.sinks.sink1.hdfs.path = hdfs://localhost:9000/user/acadgild/cd
+agent2.sinks.sink1.hdfs.filePrefix = events
+agent2.sinks.sink1.hdfs.fileSuffix = .log
+agent2.sinks.sink1.hdfs.inUsePrefix = _
+agent2.sinks.sink1.hdfs.fileType = DataStream
+agent2.channels.channel1.type = file
+***********************************************************************
+command to execute the Flume command
+***********************************************************************
+flume-ng agent --conf-file flume.conf --name agent2
+
+
+********************************************************************************
+command to mov the Consumer Complaint data into spooldir
+********************************************************************************
+
+cp /home/acadgild/Desktop/cc.csv /home/acadgild/Desktop/tmp/spooldir
+
+***********************************************************************************
+1. Write a pig script to find no of complaints which got timely response
+***********************************************************************************
+
+
+REGISTER /usr/local/pig/lib/piggybank.jar
+
+DEFINE CSVExcelStorage org.apache.pig.piggybank.storage.CSVExcelStorage(',');
+
+A = LOAD '/user/acadgild/cd' USING CSVExcelStorage();
+
+B = Filter A BY $13 == 'Yes';
+
+C = ForEach B Generate (chararray)$13 as tr, (INT)$15 as cid;
+
+D = group C by tr;
+
+E = FOREACH D Generate group, COUNT(C.cid);
+
+Store E into 'tr' Using PigStorage(',');
+
+*********************************************************************
+Creating the schema in MYSQL
+***********************************************************************
+mysql -u root
+
+use db1;
+
+create table task1
+(
+tr varchar(5), cid INT(20) not null primary key
+);
+**********************************************************************
+command to export the Mysql using sqoop
+**********************************************************************
+sqoop export --connect jdbc:mysql://localhost/db1 \
+--username root \
+--table task1 \
+--export-dir /user/acadgild/task1/part-r-00000 \
+--input-fields-terminated-by ',';
+****************************************************************************************************************************
+Write a pig script to find no of complaints where consumer forum forwarded the complaint same day they received to respective company
+***************************************************************************************************************************
+
+A = LOAD '/user/acadgild/cd' USING CSVExcelStorage();
+
+B = Filter A BY $0 == $11;
+
+C = group B All;
+
+D = FOREACH C Generate COUNT(B);
+
+Store D into 'task2' Using PigStorage(',');
+*************************************************
+create table task2
+(
+var1 INT(20) not null primary key
+);
+**********************************************************************
+command to export the Mysql using sqoop
+**********************************************************************
+sqoop export --connect jdbc:mysql://localhost/db1 \
+--username root \
+--table task2 \
+--export-dir /user/acadgild/task2/part-r-00000 \
+--input-fields-terminated-by ',';
+
+
+*****************************************************************************************************************************
+
+Write a pig script to find list of companies toping in complaint chart (companies with maximum number of complaints)
+
+A = LOAD '/user/acadgild/cd' USING CSVExcelStorage();
+
+B = foreach A generate (chararray)$7 as company, (chararray)$15 as id;
+
+C = group B by company;
+
+D = FOREACH C GENERATE group, COUNT(B.id) as countcomplaint;
+
+E = order D by countcomplaint desc;
+
+F = limit E 10;
+
+Dump F;
+
+Store F into 'task3' Using PigStorage(',');
+*********************************************************
+create table task3
+(
+var1 varchar(2000), noofcom INT(10) not null primary key
+);
+**********************************************************************
+command to export the Mysql using sqoop
+**********************************************************************
+sqoop export --connect jdbc:mysql://localhost/db1 \
+--username root \
+--table task3 \
+--export-dir /user/acadgild/task3/part-r-00000 \
+--input-fields-terminated-by ',';
+********************************************************************************
+4. Write a pig script to find no of complaints filed with product type has “ Debt collection” for the year 2015.
+
+A = LOAD '/user/acadgild/cd' USING CSVExcelStorage();
+
+B = foreach A generate (chararray)$0 as date, (chararray)$1 as product, (int)$15 as id;
+
+C = Filter B by product == 'Debt collection' and GetYear(ToDate(date, 'MM/DD/YYYY')) ==2015;
+
+D = group C by product;
+
+E = foreach D generate group, COUNT(C.id);
+
+Store E into 'task4' Using PigStorage(',');
+
+
+*********************************************************
+create table task4
+(
+var1 varchar(2000), noofcom INT(10) not null primary key
+);
+**********************************************************************
+command to export the Mysql using sqoop
+**********************************************************************
+sqoop export --connect jdbc:mysql://localhost/db1 \
+--username root \
+--table task4 \
+--export-dir /user/acadgild/task4/part-r-00000 \
+--input-fields-terminated-by ',';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
